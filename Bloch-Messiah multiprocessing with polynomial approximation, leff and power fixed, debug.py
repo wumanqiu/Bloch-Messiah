@@ -196,26 +196,26 @@ omega_p=2*np.pi*c/wl
 #lambda_1 = 2*np.pi*c/omg1[:]
 #lambda_2 = 2*np.pi*c/omg2[:]
 #4350s for freq-500, z-10000
-num_freq_pts=500 # generating n+1 x n+1 matrix for the Green functions
-num_z_pts=4000 # number of points in the z direction for simulation
+num_freq_pts=200 # generating n+1 x n+1 matrix for the Green functions
+num_z_pts=200 # number of points in the z direction for simulation
 
 L=0.001 # device effective length in m
 
 
 
 
-pump_duration=5e-12
+pump_duration=0.1e-12
 pump_bw = 1.177 * np.sqrt(2) / pump_duration
 #omega_p=2*np.pi*c/791.5e-9
 #omega_p=2*np.pi*c/793.6272586437883e-9
 epsilon0 = 8.85e-12
-freq_scale = 2500
+freq_scale = 40
 
 deff = 370e-12 # in meter/volt
 
 ## effective length, define variables related to z
 power_avg_in=0.005 #in W
-power_avg_in=0.25 #in W
+#power_avg_in=0.25 #in W
 area=4.9*1e-12 #m^2
 deltat=1/(80e6) #period
 power_peak=power_avg_in*deltat/(1.06484*pump_duration)
