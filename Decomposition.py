@@ -14,29 +14,32 @@ from scipy import optimize
 import copy
 import time
 num_freq_pts=500 # generating nxn matrix for the Green functions
-num_z_pts=1000# number of points in the z direction for simulation
+num_z_pts=1520# number of points in the z direction for simulation
 pump_duration=0.1 #in ps
 scale=1
 scale_p=1
 loss=0
 wl= 793.6272586437883e-9#in m
 #wl=820e-9
-power=0.007 #in W
+power=0.005 #in W
 folder_name=str(power)+'W\\'
 #folder_name=''
 parts=0
 approx=False
-Rk4=True
+Rk4=False
 def check_unique(v):
     for i in range (1,len(v)):
-        assert(np.abs(v[i])<np.abs(v[i-1]))
+        if (not(np.abs(v[i])<np.abs(v[i-1]))):
+            print(i)
+            return
+    print('all good')
 def check_modes(omega_sig,u,v,w,S,n):
     out=u[:,0:n]*v[0:n]@w[0:n,:]
-    plt.figure(10000)
+    plt.figure(20000)
     plt.pcolor(omega_sig,omega_sig,np.abs(out))
     plt.colorbar()
     plt.show()
-    plt.figure(10001)
+    plt.figure(20001)
     plt.pcolor(omega_sig,omega_sig,np.abs(S-out))
     plt.colorbar()
     plt.show()
@@ -100,7 +103,9 @@ if (num_z_pts>0):
 #check_modes(omega_sig,us,vs,ws,S,1)
 # check_unique(vs)
 # check_unique(vc)
-if (num_z_pts>0):
+
+if (num_z_pts>1e10):
+
     plt.figure(101)
     plt.pcolor(omega_sig,omega_sig,np.abs(C))
     #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
@@ -121,11 +126,7 @@ if (num_z_pts>0):
     #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
     plt.colorbar()
     plt.show()
-    plt.figure(105)
-    plt.pcolor(omega_sig,omega_sig,np.abs(ddif+1j*ssum))
-    #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
-    plt.colorbar()
-    plt.show()
+
     plt.figure(106)
     plt.pcolor(omega_sig,omega_sig,np.angle(S,deg=True))
     plt.colorbar()
@@ -133,20 +134,20 @@ if (num_z_pts>0):
     #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
     plt.savefig(folder_name+"S phase, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
     plt.show()
-    plt.figure(107)
-    plt.pcolor(omega_sig,omega_sig,np.abs(np.real(S)))
-    plt.colorbar()
-    plt.title("S real "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
-    #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
-    #plt.savefig(folder_name+"S real, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
-    plt.show()
-    plt.figure(108)
-    plt.pcolor(omega_sig,omega_sig,np.imag(S))
-    plt.colorbar()
-    plt.title("S imag "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
-    #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
-    #plt.savefig(folder_name+"S imag, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
-    plt.show()
+    # plt.figure(107)
+    # plt.pcolor(omega_sig,omega_sig,np.abs(np.real(S)))
+    # plt.colorbar()
+    # plt.title("S real "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
+    # #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+    # #plt.savefig(folder_name+"S real, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
+    # plt.show()
+    # plt.figure(108)
+    # plt.pcolor(omega_sig,omega_sig,np.imag(S))
+    # plt.colorbar()
+    # plt.title("S imag "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
+    # #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+    # #plt.savefig(folder_name+"S imag, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
+    # plt.show()
 plt.figure(0)
 plt.plot(vs)
 plt.show()
@@ -177,29 +178,101 @@ if (num_z_pts>0):
 # plt.figure(5)
 # plt.plot(np.abs(uc[:,0]))
 # plt.show()
-plt.figure(6)
-plt.plot(omega_sig,np.abs(us[:,0]))
-plt.show()
-plt.figure(7)
-plt.plot(omega_sig,np.abs(us[:,1]))
-plt.show()
-plt.figure(8)
-plt.plot(omega_sig,np.real(us[:,2]))
-plt.show()
-plt.figure(9)
-plt.plot(omega_sig,np.real(us[:,3]))
-plt.show()
-plt.figure(10)
-plt.plot(omega_sig,np.real(us[:,4]))
-plt.show()
-plt.figure(11)
-plt.plot(omega_sig,np.real(us[:,5]))
+
+
+def extract_phase(l):
+    res=np.zeros(len(l))
+    for i, val in enumerate(l):
+        tmp= np.angle(val)
+        res[i]=tmp if tmp>=0 else 2*np.pi+tmp
+        if (i>0):
+            delta=0
+            t=np.angle(l[i-1])
+            t=t if t>=0 else 2*np.pi+t # the preivous phase between 0 and 2pi
+            if (t>=res[i]):
+                diff=2*np.pi-(t-res[i])
+            else:
+                diff=res[i]-t
+            res[i]=res[i-1]+diff
+
+    return res
+
+
+uc_new=np.zeros(uc.shape, dtype=np.complex128)
+poly=[]
+for i in range(len(omega_sig)):
+    phase_factor=us[:,i]/uc[:,i]
+    phase=extract_phase(phase_factor)
+    p=np.poly1d(np.polyfit(omega_sig, phase, 3))
+    poly.append(p)
+    uc_new[:,i]=np.exp(1j*p(omega_sig))*uc[:,i]
+
+phase_factor=us[:,0]/uc[:,0]
+phase=extract_phase(phase_factor)
+p=np.poly1d(np.polyfit(omega_sig, phase, 1))
+omg0=0.9e13/(2*np.pi)
+#phase2=np.exp(1j*omega_sig/omg0)
+plt.figure(10000)
+plt.plot(omega_sig,phase,label='exact')
+plt.plot([omega_sig[0], omega_sig[-1]],[phase[0],phase[-1]],label='linear')
+plt.plot(omega_sig,p(omega_sig),label='poly')
+plt.legend()
 plt.show()
 
-# plt.figure(13)
-# plt.plot(np.real(ws[0,:]))
-# plt.show()
-# plt.figure(14)
-# plt.plot(np.real(ws[1,:]))
-# plt.show()
+plt.figure(6)
+plt.title('first mode difference')
+plt.plot(omega_sig,(np.abs(us[:,0]-uc_new[:,0])))
+#plt.plot(omega_sig,(np.abs(us[:,0])))
+plt.plot(omega_sig,(np.abs(uc_new[:,0])))
+
+plt.show()
+plt.figure(7)
+plt.title('second mode')
+plt.plot(omega_sig,np.square(np.abs(us[:,1]-uc_new[:,1])))
+plt.plot(omega_sig,np.square(np.abs(us[:,1])))
+plt.show()
+plt.figure(8)
+plt.title('third mode')
+plt.plot(omega_sig,np.square(np.abs(us[:,2]-uc_new[:,2])))
+plt.plot(omega_sig,np.square(np.abs(us[:,2])))
+plt.show()
+plt.figure(9)
+plt.plot(omega_sig,np.square(np.abs(us[:,3]-uc_new[:,3])))
+plt.plot(omega_sig,np.square(np.abs(us[:,3])))
+plt.show()
+plt.figure(10)
+plt.plot(omega_sig,np.square(np.abs(us[:,4]-uc_new[:,4])))
+plt.plot(omega_sig,np.square(np.abs(us[:,4])))
+plt.show()
+plt.figure(11)
+plt.plot(omega_sig,np.square(np.abs(us[:,5]-uc_new[:,5])))
+plt.plot(omega_sig,np.square(np.abs(us[:,5])))
+plt.show()
+
+
+plt.figure()
+plt.title('mode w')
+plt.plot(omega_sig,np.square(np.abs(ws[0,:])-np.abs(us[:,0])))
+plt.show()
+
+plt.figure()
+plt.title('mode difference')
+plt.plot((np.arccosh(vc[0:300])-np.arcsinh(vs[0:300]))/np.abs(vc[0:300]))
+plt.show()
+plt.figure()
+plt.title('mode arccosh')
+plt.plot(np.arccosh(vc[0:300]))
+plt.show()
+plt.figure()
+plt.title('mode arcsinh')
+plt.plot(np.arcsinh(vs[0:300]))
+plt.show()
+
+plt.title('mode cosh')
+plt.plot(vc)
+plt.show()
+plt.figure()
+plt.title('mode sinh')
+plt.plot(vs)
+plt.show()
 # ☻

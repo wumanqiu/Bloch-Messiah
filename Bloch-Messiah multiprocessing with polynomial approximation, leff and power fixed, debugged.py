@@ -13,9 +13,9 @@ import time
 import os
 import sys
 os.environ["QT_API"] = "pyqt5"
-# substitution (eliminating the rotation)
 # Bloch-Messiah decomposition, work with angular frequency (rad/s)
 # Read in effective index value
+# No sub index loop test
 c=3e8
 nm = 1e9
 wl=793.6272586437883e-9 #original wavelength
@@ -80,9 +80,11 @@ def parse_data(plot_flag):
         #plt.figure(figsize=(3, 3))
         plt.show()
     return omg1,omg2, n1,n2
-
+#@jit(nopython=True)
 def poly_val(coef, omg, choice):
     ans=0.0
+    if (type(omg)==np.ndarray):
+        a=np.zeros(len(omg))
     omg0=omega_p0
     if (choice==2):
         omg0/=2
@@ -119,61 +121,55 @@ def f(E0,omgi,omgs,omgp,pump_duration,leff,fo1=n1[-2],fo2=n2[-2],zo1=n1[-1],zo2=
     return Ep(E0,omgs+omgi,omgp,pump_duration)*np.sinc(deltak(omgi,omgs,fo1,fo2,zo1,zo2)*leff/2/np.pi)
 
 @jit(nopython=True)
-def z_propagation(omega_sig,omega_idx,a,lp,lp_length,k_sig,k_pump,E_pump,dz,Leff):
+def z_propagation(omega_sig,a,lp,lp_length,k_sig,k_pump,E_pump,dz,Leff):
     # Step Through Each Length Index
     cur=0
     nextt=0
     for z_idx in range(0,lp_length-1):
         nextt=(cur^1)
-        #a[cur, :] = a[cur, :] * np.exp(1j * k_sig * dz/2)
+        a[cur, :] = a[cur, :] * np.exp(1j * k_sig * dz/2)
+        z_val = lp[z_idx]
         for omega1_idx, omega in enumerate(omega_sig):
-            #a_increment = field_increment(omega_sig, omega1_idx, a, z_idx,lp[z_idx],E_pump)
-            z_val = lp[z_idx]
             #--------------------------------------------
-            # tmp=np.zeros(len(omega_sig))
-            # for i in range(len(omega_sig)):
-            #     tmp[i]=kp(omega_sig[i]+omega_sig[omega1_idx])-k_sig[omega_idx]-k_sig[i]
-            # assert(np.array_equal(tmp,k_pump[:, omega1_idx]-k_sig[omega_idx]-k_sig[:]))
-            integrand = np.exp(1j * (k_pump[:, omega1_idx]-k_sig[omega1_idx]-k_sig[:]) * (z_val - Leff / 2)) * E_pump[:, omega1_idx] * np.conjugate(a[cur,:])
+            integrand=np.exp(1j * k_pump[:, omega1_idx] * (z_val - Leff / 2)) * E_pump[:, omega1_idx] * np.conjugate(a[cur,:])*np.sqrt(omega_sig*omega/(n_sig*n_sig[omega1_idx]))
             domg = omega_sig[1] - omega_sig[0]
             nonlin_term = np.sum(integrand) * domg
             a_increment = 1 / (Lnl * E0) * nonlin_term
             #--------------------------------------------
             a[nextt, omega1_idx] = a[cur, omega1_idx] + a_increment * dz
-        #a[nextt, :] = a[nextt, :] * np.exp(1j * k_sig * dz/2)
+        a[nextt, :] = a[nextt, :] * np.exp(1j * k_sig * dz/2)
         cur=nextt
-    return a[cur,:]*np.exp(1j*k_sig*Leff/2)
+    return a[cur,:]
 # @jit(nopython=True) # can't jit
 def get_greens_functions_multicore(omega_sig,k_sig,k_pump,E_pump,summ,diff,dz,omgn1,omgn2,scale_p,scale):
 
     k_pump =  kp(omega_pump,fo=n1[-2]*scale_p)
     k_sig = k(omega_sig, fo=n2[-2]*scale)
-    Lnl = (8*c**2*k(omega_p/2,fo=n2[-2]*scale))/(omega_p**2*deff*E0) # in 1/m
     Leff=leff(scale_p,scale)
     print(Leff)
     dz=Leff/(num_z_pts)
 
     lp=np.arange(0,Leff,dz) #L partitioned
     # a = np.zeros((len(lp), len(omega_sig)), dtype=complex)
-    a = np.zeros((2, len(omega_sig)), dtype=complex)
+    a = np.zeros((2, len(omega_sig)), dtype=np.complex128)
     for omega_index in range(omgn1,omgn2):
         print(str(omega_index)+'/'+str(omgn2))
         #f.write(str(omega_index)+'/'+str(omgn2))
         sys.stdout.flush()
-        a[0, omega_index] = 1 / domg * np.exp(1j * k_sig[omega_index] *Leff/2)
+        a[0,:]=0
+        a[0, omega_index] = 1 / domg
         #a_out = z_propagation(omega_sig, a, lp, len(lp), k_sig, k_pump, E_pump,dz)
         #mag=cmath.polar(a_out[-1, omega_index])[0]
         #a_out[-1, omega_index] =0
         #a_out[-1, omega_index] *=(mag-1 / domg)/mag
-        summ[omega_index] = z_propagation(omega_sig,omega_index, a, lp, len(lp), k_sig, k_pump, E_pump,dz,Leff)#a_out[-1, :]
+        summ[omega_index] = z_propagation(omega_sig, a, lp, len(lp), k_sig, k_pump, E_pump,dz,Leff)#a_out[-1, :]
         a[0,:]=0
-        a[0, omega_index] = 1j / domg * np.exp(1j * k_sig[omega_index] *Leff/2)
+        a[0, omega_index] = 1j / domg
         #a_out =
         #mag=cmath.polar(a_out[-1, omega_index])[0]
         #a_out[-1, omega_index] =0
         #a_out[-1, omega_index] *=(mag-1 / domg)/mag
-        diff[omega_index] = z_propagation(omega_sig,omega_index, a, lp, len(lp), k_sig, k_pump, E_pump,dz,Leff)#a_out[-1, :]
-        a[0,:]=0
+        diff[omega_index] = z_propagation(omega_sig, a, lp, len(lp), k_sig, k_pump, E_pump,dz,Leff)#a_out[-1, :]
 
 # @jit(nopython=True)
 # def get_greens_functions(omega_sig,a,k_sig,k_pump,E_pump,summ,diff,dz):#not used
@@ -194,14 +190,13 @@ def get_greens_functions_multicore(omega_sig,k_sig,k_pump,E_pump,summ,diff,dz,om
 ## Define Frequency
 start_time = time.time()
 wl=793.6272586437883e-9 #central wavelength for this particular simulation
-# wl=775e-9
-#wl=800e-9
+#wl=775e-9 #central wavelength for this particular simulation
 omega_p=2*np.pi*c/wl
 #lambda_1 = 2*np.pi*c/omg1[:]
 #lambda_2 = 2*np.pi*c/omg2[:]
 #4350s for freq-500, z-10000
 num_freq_pts=500 # generating n+1 x n+1 matrix for the Green functions
-num_z_pts=1000 # number of points in the z direction for simulation
+num_z_pts=1520 # number of points in the z direction for simulation
 
 L=0.001 # device effective length in m
 
@@ -218,7 +213,7 @@ freq_scale = 40
 deff = 370e-12 # in meter/volt
 
 ## effective length, define variables related to z
-power_avg_in=0.007 #in W
+power_avg_in=0.005 #in W
 area=4.9*1e-12 #m^2
 deltat=1/(80e6) #period
 power_peak=power_avg_in*deltat/(1.06484*pump_duration)
@@ -261,10 +256,12 @@ lp=0 #np.arange(0,Leff,dz) #np.arange(0,Leff,dz) #L partitioned
 omega_signal_c = omega_p/2
 omega_sig = np.linspace(omega_signal_c - pump_bw*freq_scale,omega_signal_c+pump_bw*freq_scale,num_freq_pts)
 omega_pump = np.array(np.meshgrid(omega_sig,omega_sig))[0] + np.array(np.meshgrid(omega_sig,omega_sig))[1]
-k_sig = [] #k(omega_sig, fo=n2[-2]*scale)
-k_pump =[] #  kp(omega_pump,fo=n1[-2]*scale_p)
+k_sig = 0 #k(omega_sig, fo=n2[-2]*scale)
+k_pump =0 #  kp(omega_pump,fo=n1[-2]*scale_p)
 E_pump = Ep(E0,omega_pump,omega_p,pump_duration)
-Lnl = (8*c**2*k(omega_p/2))/(omega_p**2*deff*E0) # in 1/m
+n_sig = poly_val(n2, omega_sig, 2)
+
+Lnl = (8*c**2*k(omega_p/2))/(omega_p**2*deff*E0)*(omega_p/2)/poly_val(n2,omega_p/2,2) # in 1/m
 domg = omega_sig[1] - omega_sig[0]
 
 #summ = np.zeros((len(omega_sig),len(omega_sig)), dtype=complex)
@@ -307,7 +304,7 @@ if __name__=='__main__':
             scale_p=val_i
             scale=val_j
 
-            processes = multiprocessing.cpu_count()*2//4 #number of cores in the CPU
+            processes = multiprocessing.cpu_count()*2//4-1 #number of cores in the CPU
             #processes=1
             manager=Manager()
             summ=manager.list(init_list)
@@ -319,7 +316,7 @@ if __name__=='__main__':
             #diff=[[0]*(len(omega_sig)) for j in range(len(omega_sig))]
             index=np.linspace(omg_start,omg_end,processes+1,dtype=int, endpoint=True)
             p=[]
-            Leff=leff(scale_p,scale)
+
             for l in range(processes):
                 p.append(Process(target=get_greens_functions_multicore, args=(omega_sig,k_sig,k_pump,E_pump,summ,diff,dz,index[l],index[l+1],val_i,val_j,)))
                 p[l].start()
@@ -344,7 +341,7 @@ if __name__=='__main__':
             file_name = 'Green_Functions_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(pump_duration*1e12)+"ps_"+str(power_avg_in)+"W"+'_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)
             if part>0:
                 file_name+='_part_'+str(part)
-            with open(folder_name+file_name+'_substitution.pickle','wb') as handle:
+            with open(folder_name+file_name+'.pickle','wb') as handle:
                 pickle.dump(to_save, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
             #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
@@ -356,7 +353,7 @@ if __name__=='__main__':
             plt.ylabel(r"$\omega'$ (rad/s)")
             plt.title(r"$S(\omega,\omega')$ "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
 
-            plt.savefig(folder_name+"S "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution.png', format='png')
+            plt.savefig(folder_name+"S "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'.png', format='png')
             #plt.show()
 
             plt.figure(figure_num+1)
@@ -366,21 +363,21 @@ if __name__=='__main__':
             plt.xlabel(r'$\omega$ (rad/s)')
             plt.ylabel(r"$\omega'$ (rad/s)")
             plt.title(r"$C(\omega,\omega')$ "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
-            plt.savefig(folder_name+"C "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution.png', format='png')
+            plt.savefig(folder_name+"C "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'.png', format='png')
             #plt.show()
 
             plt.figure(figure_num+2)
             plt.title("phasematching function "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
             plt.pcolor(omega_sig,omega_sig,phasematching(omega_sig[:,None],omega_sig[None,:],leff(val_i,val_j),fo1=n1[-2]*val_i, fo2=n2[-2]*val_j))
             plt.colorbar()
-            plt.savefig(folder_name+"phasematching function "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution.png', format='png')
+            plt.savefig(folder_name+"phasematching function "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'.png', format='png')
             #plt.show()
 
             plt.figure(figure_num+3)
             plt.title("JSA "+'pump scale: '+"{:.2f}".format(scale_p)+', signal scale: '+"{:.2f}".format(scale))
             plt.pcolor(omega_sig,omega_sig,f(E0,omega_sig[:,None],omega_sig[None,:],omega_p,pump_duration,leff(val_i,val_j),fo1=n1[-2]*val_i, fo2=n2[-2]*val_j))
             plt.colorbar()
-            plt.savefig(folder_name+"JSA "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution.png', format='png')
+            plt.savefig(folder_name+"JSA "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power_avg_in)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'.png', format='png')
             figure_num+=4
             #plt.show()
             p.clear()
