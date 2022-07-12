@@ -1,7 +1,8 @@
 from scipy.io import loadmat
 from scipy.io import savemat
-
+import scipy.linalg as la
 from scipy.interpolate import interp1d
+import scipy
 import matplotlib.pyplot as plt
 import itertools as it
 import numpy as np
@@ -14,7 +15,7 @@ from scipy import optimize
 import copy
 import time
 num_freq_pts=500 # generating nxn matrix for the Green functions
-num_z_pts=1520# number of points in the z direction for simulation
+num_z_pts=50000# number of points in the z direction for simulation
 pump_duration=0.1 #in ps
 scale=1
 scale_p=1
@@ -81,6 +82,8 @@ else:
     ssum=data['ssum']
     ddif=data['ddif']
     omega_sig=data['omega_sig']
+C=C.T
+S=S.T
 # save as matlab file
 # savemat("S_"+num_freq_pts+"x"+num_z_pts+".mat",{'S':S})
 
@@ -96,14 +99,34 @@ else:
 # plt.show()
 domg=omega_sig[1]-omega_sig[0]
 us,vs,ws=np.linalg.svd(S)
+ws=ws.T.conj()
 if (num_z_pts>0):
     uc,vc,wc=np.linalg.svd(C)
     vc*=domg
     vs*=domg
-#check_modes(omega_sig,us,vs,ws,S,1)
-# check_unique(vs)
-# check_unique(vc)
-
+    wc=wc.T.conj()
+# plt.figure(101)
+# plt.pcolor(omega_sig,omega_sig,np.abs(C@(np.conj(C).T)-S@(np.conj(S).T)))
+# #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+# plt.colorbar()
+# plt.show()
+# plt.figure(102)
+# plt.pcolor(omega_sig,omega_sig,np.abs((C@S).T-C@S))
+# #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+# plt.colorbar()
+# plt.show()
+# plt.figure(103)
+# plt.pcolor(omega_sig,omega_sig,np.abs(C@(np.conj(C).T)))
+# #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+# plt.colorbar()
+# plt.show()
+test=np.array([[1,2,3],[4,5,6],[7,8,9]])
+x=[1,2,3,4]
+# plt.figure(-1)
+# plt.pcolor(x,x,test)
+# #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
+# plt.colorbar()
+# plt.show()
 if (num_z_pts>1e10):
 
     plt.figure(101)
@@ -148,12 +171,14 @@ if (num_z_pts>1e10):
     # #plt.pcolor(2*np.pi*c/omega_sig*1e9,2*np.pi*c/omega_sig*1e9,np.abs(S))
     # #plt.savefig(folder_name+"S imag, "+'pump scale '+"{:.2f}".format(scale_p)+', signal scale '+"{:.2f}".format(scale)+'_'+str(num_freq_pts)+'_' + str(num_z_pts)+'_'+str(power)+'W_'+"{:.2f}".format(scale_p)+'_'+"{:.2f}".format(scale)+'_'+str(wl)+'_substitution_rk4.png', format='png')
     # plt.show()
-plt.figure(0)
-plt.plot(vs)
-plt.show()
+# plt.figure(0)
+# plt.plot(vs)
+# plt.show()
 if (num_z_pts>0):
     plt.figure(1)
+    plt.title('mode distribution')
     plt.plot(20*np.log10(np.arcsinh(vs)))
+    plt.ylabel('dB')
     plt.show()
     # plt.figure(2)
     # plt.plot(np.arccosh(vc))
@@ -179,95 +204,157 @@ if (num_z_pts>0):
 # plt.plot(np.abs(uc[:,0]))
 # plt.show()
 
-
-def extract_phase(l):
-    res=np.zeros(len(l))
-    for i, val in enumerate(l):
-        tmp= np.angle(val)
-        res[i]=tmp if tmp>=0 else 2*np.pi+tmp
-        if (i>0):
-            delta=0
-            t=np.angle(l[i-1])
-            t=t if t>=0 else 2*np.pi+t # the preivous phase between 0 and 2pi
-            if (t>=res[i]):
-                diff=2*np.pi-(t-res[i])
-            else:
-                diff=res[i]-t
-            res[i]=res[i-1]+diff
-
-    return res
-
-
-uc_new=np.zeros(uc.shape, dtype=np.complex128)
-poly=[]
+##joint decomposition transformation
+u=np.zeros(S.shape,dtype=np.complex128)
+u_diag=np.zeros(len(omega_sig),dtype=np.complex128)
 for i in range(len(omega_sig)):
-    phase_factor=us[:,i]/uc[:,i]
-    phase=extract_phase(phase_factor)
-    p=np.poly1d(np.polyfit(omega_sig, phase, 3))
-    poly.append(p)
-    uc_new[:,i]=np.exp(1j*p(omega_sig))*uc[:,i]
+    u_diag[i]=np.angle(us[0,i]/uc[0,i])
+np.fill_diagonal(u,np.exp(1j*u_diag))
+uc=uc@u
+wc=wc@u
+uc_old=uc
+## Takagi
+G=(np.conj(wc).T)@np.conj(ws)
+D1=scipy.linalg.sqrtm(G)
 
-phase_factor=us[:,0]/uc[:,0]
-phase=extract_phase(phase_factor)
-p=np.poly1d(np.polyfit(omega_sig, phase, 1))
-omg0=0.9e13/(2*np.pi)
-#phase2=np.exp(1j*omega_sig/omg0)
-plt.figure(10000)
-plt.plot(omega_sig,phase,label='exact')
-plt.plot([omega_sig[0], omega_sig[-1]],[phase[0],phase[-1]],label='linear')
-plt.plot(omega_sig,p(omega_sig),label='poly')
-plt.legend()
-plt.show()
+uc=uc@D1
+wc=wc@D1
+us=us@D1
+ws=ws@D1
 
+
+# plt.figure(1001)
+# plt.pcolor(np.log10(np.abs(S-us@np.diag(vs/domg)@ws.conj().T)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1002)
+# plt.pcolor(np.log10(np.abs(C-uc@np.diag(vc/domg)@wc.conj().T)))
+# plt.colorbar()
+# plt.show()
+#
+# plt.figure(1003)
+# plt.pcolor(np.log10(np.abs(S)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1004)
+# plt.pcolor(np.log10(np.abs(C)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1005)
+# plt.pcolor(np.log10(np.abs(us@np.diag(vs/domg)@ws.conj().T)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1006)
+# plt.pcolor(np.log10(np.abs(uc@np.diag(vc/domg)@wc.conj().T)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1007)
+# plt.pcolor(np.abs(us@np.diag(vs/domg)@ws.conj().T))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1008)
+# plt.pcolor(np.abs(uc@np.diag(vc/domg)@wc.conj().T))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1009)
+# plt.pcolor(np.log10(np.abs(G-D1@D1)))
+# plt.colorbar()
+# plt.show()
+# plt.figure(1010)
+# plt.pcolor(np.log10(np.abs(D1-D1.T)))
+# plt.colorbar()
+# plt.show()
+## modes from U:
 plt.figure(6)
-plt.title('first mode difference')
-plt.plot(omega_sig,(np.abs(us[:,0]-uc_new[:,0])))
-#plt.plot(omega_sig,(np.abs(us[:,0])))
-plt.plot(omega_sig,(np.abs(uc_new[:,0])))
+plt.title('first mode')
+plt.plot(omega_sig,(np.abs(us[:,0]-uc[:,0])))
+plt.plot(omega_sig,(np.abs(us[:,0])))
 
 plt.show()
 plt.figure(7)
 plt.title('second mode')
-plt.plot(omega_sig,np.square(np.abs(us[:,1]-uc_new[:,1])))
+plt.plot(omega_sig,np.square(np.abs(us[:,1]-uc[:,1])))
 plt.plot(omega_sig,np.square(np.abs(us[:,1])))
 plt.show()
 plt.figure(8)
 plt.title('third mode')
-plt.plot(omega_sig,np.square(np.abs(us[:,2]-uc_new[:,2])))
+plt.plot(omega_sig,np.square(np.abs(us[:,2]-uc[:,2])))
 plt.plot(omega_sig,np.square(np.abs(us[:,2])))
 plt.show()
 plt.figure(9)
-plt.plot(omega_sig,np.square(np.abs(us[:,3]-uc_new[:,3])))
+plt.plot(omega_sig,np.square(np.abs(us[:,3]-uc[:,3])))
 plt.plot(omega_sig,np.square(np.abs(us[:,3])))
 plt.show()
 plt.figure(10)
-plt.plot(omega_sig,np.square(np.abs(us[:,4]-uc_new[:,4])))
+plt.plot(omega_sig,np.square(np.abs(us[:,4]-uc[:,4])))
 plt.plot(omega_sig,np.square(np.abs(us[:,4])))
 plt.show()
 plt.figure(11)
-plt.plot(omega_sig,np.square(np.abs(us[:,5]-uc_new[:,5])))
+plt.plot(omega_sig,np.square(np.abs(us[:,5]-uc[:,5])))
 plt.plot(omega_sig,np.square(np.abs(us[:,5])))
 plt.show()
 
+#check that transformation is okay
+plt.figure(206)
+plt.title('first mode')
+plt.plot(omega_sig,(np.abs(us[:,0])-np.abs(uc_old[:,0])))
 
-plt.figure()
-plt.title('mode w')
-plt.plot(omega_sig,np.square(np.abs(ws[0,:])-np.abs(us[:,0])))
+plt.show()
+plt.figure(207)
+plt.title('second mode')
+plt.plot(omega_sig,np.square(np.abs(us[:,1])-np.abs(uc_old[:,1])))
+plt.show()
+plt.figure(208)
+plt.title('third mode')
+plt.plot(omega_sig,np.square(np.abs(us[:,2])-np.abs(uc_old[:,2])))
 plt.show()
 
+## modes from W:
+plt.figure(16)
+plt.title('first mode difference')
+plt.plot(omega_sig,(np.abs(ws[:,0]-np.conj(wc[:,0]))))
+#plt.plot(omega_sig,(np.abs(us[:,0])))
+plt.plot(omega_sig,(np.abs(ws[:,0])))
+
+plt.show()
+plt.figure(17)
+plt.title('second mode')
+plt.plot(omega_sig,np.square(np.abs(ws[:,1]-np.conj(wc[:,1]))))
+plt.plot(omega_sig,np.square(np.abs(ws[:,1])))
+plt.show()
+plt.figure(18)
+plt.title('third mode')
+plt.plot(omega_sig,np.square(np.abs(ws[:,2]-np.conj(wc[:,2]))))
+plt.plot(omega_sig,np.square(np.abs(ws[:,2])))
+plt.show()
+plt.figure(19)
+plt.plot(omega_sig,np.square(np.abs(ws[:,3]-np.conj(wc[:,3]))))
+plt.plot(omega_sig,np.square(np.abs(ws[:,3])))
+plt.show()
+plt.figure(20)
+plt.plot(omega_sig,np.square(np.abs(ws[:,4]-np.conj(wc[:,4]))))
+plt.plot(omega_sig,np.square(np.abs(ws[:,4])))
+plt.show()
+plt.figure(21)
+plt.plot(omega_sig,np.square(np.abs(ws[:,5]-np.conj(wc[:,5]))))
+plt.plot(omega_sig,np.square(np.abs(ws[:,5])))
+plt.show()
+## mode magnitude
 plt.figure()
 plt.title('mode difference')
 plt.plot((np.arccosh(vc[0:300])-np.arcsinh(vs[0:300]))/np.abs(vc[0:300]))
 plt.show()
+
 plt.figure()
 plt.title('mode arccosh')
 plt.plot(np.arccosh(vc[0:300]))
 plt.show()
+
 plt.figure()
 plt.title('mode arcsinh')
 plt.plot(np.arcsinh(vs[0:300]))
 plt.show()
-
+plt.figure()
 plt.title('mode cosh')
 plt.plot(vc)
 plt.show()
